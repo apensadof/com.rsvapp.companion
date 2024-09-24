@@ -1,0 +1,62 @@
+{
+  "description": "RSV Companion",
+  "name": "rsv-companion",
+  "version": "0.5.0",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "auto-launch": "^5.0.6",
+    "axios": "^1.7.7",
+    "electron-log": "^5.2.0",
+    "electron-updater": "^6.3.4",
+    "fs": "*",
+    "ini": "^5.0.0",
+    "mssql": "^11.0.1",
+    "path": "^0.12.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "electron": "^32.1.2",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.rsvapp.companion",
+    "productName": "RSV Companion",
+    "files": [
+      "build/**/*",
+      "src/**/*"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "apensadof",
+        "repo": "com.rsvapp.companion",
+        "private": false
+      }
+    ]
+  }
+}
