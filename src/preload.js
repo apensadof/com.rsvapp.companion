@@ -12,7 +12,7 @@ window.addEventListener('DOMContentLoaded', () => {
 contextBridge.exposeInMainWorld('electronAPI', {
     findIniFile: () => ipcRenderer.invoke('find-ini-file'),
     onIniData: (callback) => ipcRenderer.on('ini-data', (event, data) => callback(data)),
-    invoke: (channel, data) => ipcRenderer.invoke(channel, data),  // Usa invoke para la comunicación asíncrona
+    invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),  // Usa invoke para la comunicación asíncrona
     startDevTools: (callback) => ipcRenderer.invoke('start-dev-tools'),
     getAppInfo: () => ipcRenderer.invoke('get-app-info'), // Custom information from the main process
     send: (channel, data) => ipcRenderer.send(channel, data),

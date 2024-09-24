@@ -1,4 +1,4 @@
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, dialog } = require('electron');
 
 let selectedPrinter = null;
 
@@ -15,7 +15,7 @@ function setup_printHandlers(ipcMain, mainWindow) {
   });
 
   // Seleccionar impresora
-  ipcMain.handle('select-printer', async (event, printerName) => {
+  ipcMain.handle('select-printer', async (event, printerIndex) => {
     try {
       const printers = await mainWindow.webContents.getPrintersAsync();
       
@@ -28,6 +28,7 @@ function setup_printHandlers(ipcMain, mainWindow) {
       }
     } catch (error) {
       console.error('Error al seleccionar impresora:', error);
+      mainWindow.webContents.send("console-log", "Error al seleccionar impresora: "+error);
       throw new Error('Error al seleccionar impresora');
     }
   });
@@ -48,9 +49,8 @@ function setup_printHandlers(ipcMain, mainWindow) {
   });
 
     // Imprimir iframe
-    ipcMain.handle('print-iframe', async (event, src, config = {}) => {
+    ipcMain.handle('print-iframe', async (event, src, paramsConfig = {}) => {
         mainWindow.webContents.send("console-log", "Triggered print-ifr interface: " + src);
-
     try {
         let printWindow = new BrowserWindow(
             { 
@@ -66,18 +66,18 @@ function setup_printHandlers(ipcMain, mainWindow) {
 
         printWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
             console.error('Error cargando el iframe:', errorDescription);
-            mainWindow.webContents.send("console-log", "Error cargando el iframe: " + errorDescription);
+            mainWindow.webContents.send("console-log", "Error loading iframe: " + errorDescription);
             printWindow.close();
             throw new Error('Error cargando el iframe');
         });
 
         // Esperar hasta que el iframe haya cargado
         printWindow.webContents.on('did-finish-load', async () => {
-        mainWindow.webContents.send("console-log", "Se va a imprimir " + src);
 
         try {
+            // mainWindow.webContents.send("console-log", "Starting print process");
+
             // Obtener la lista de impresoras
-            const printers = await mainWindow.webContents.getPrintersAsync();
 
             /*// Verificar si hay una impresora seleccionada
             let deviceName = null;
@@ -91,12 +91,13 @@ function setup_printHandlers(ipcMain, mainWindow) {
                 deviceName = selectedPrinter ? selectedPrinter.name : null;
             }*/
 
+            const printers = await mainWindow.webContents.getPrintersAsync();
 
             // Obtener la configuración con valores por defecto
             // Definir la configuración predeterminada
             const defaultConfig = {
                 deviceName: printers[0].name,  // Impresora predeterminada
-                silent: false,  // No mostrar el diálogo de impresión
+                silent: true,  // No mostrar el diálogo de impresión
                 printBackground: true,  // Imprimir con fondos
                 margins: {marginType: 'default'},  // Sin márgenes
                 pageSize: 'Letter',  // Tamaño de página predeterminado
@@ -112,16 +113,16 @@ function setup_printHandlers(ipcMain, mainWindow) {
             // Combinar la configuración predeterminada con la personalizada proporcionada en `config`
             const printConfig = {
                 ...defaultConfig,  // Valores por defecto
-                ...config,  // Sobrescribir con la configuración proporcionada
-                deviceName: config.selectedPrinter !== undefined 
-                    ? printers[config.selectedPrinter]?.name 
-                    : defaultConfig.deviceName,  // Elegir impresora según el índice o usar la predeterminada
+                ...paramsConfig,  // Sobrescribir con la configuración proporcionada
+
+                // Si 'selectedPrinter' está definida en config y existe en la lista de impresoras, usarla
+                deviceName: (paramsConfig.selectedPrinter !== undefined && printers[paramsConfig.selectedPrinter])
+                    ? printers[paramsConfig.selectedPrinter].name  // Usar la impresora seleccionada
+                    : defaultConfig.deviceName  // Usar la impresora predeterminada si no se selecciona una
             };
 
-            mainWindow.webContents.send("console-log", "Impresora a elegir: " + deviceName);
-
-            // Ejecutar la impresión
-            printWindow.webContents.print({
+            // Definir la configuración del trabajo de impresión
+            const printJobConfig = {
                 deviceName: printConfig.deviceName,
                 silent: printConfig.silent,
                 printBackground: printConfig.printBackground,
@@ -133,12 +134,18 @@ function setup_printHandlers(ipcMain, mainWindow) {
                 collate: printConfig.collate,
                 copies: printConfig.copies,
                 duplexMode: printConfig.duplexMode,
-            }, (success, failureReason) => {
+            };
+            //mainWindow.webContents.send("console-log", "Print config: " + JSON.stringify(printJobConfig));
+
+            //mainWindow.webContents.send("console-log", "Selected printer: " + printConfig.deviceName);
+
+            // Ejecutar la impresión
+            printWindow.webContents.print(printJobConfig, (success, failureReason) => {
                 if (success) {
-                    mainWindow.webContents.send("console-log", "Impresión exitosa");
+                    // mainWindow.webContents.send("console-log", "Printing succeeded");
                 } else {
-                    showErrorDialog("Error al imprimir iframe: " + failureReason);
-                    console.error('Error al imprimir iframe:', failureReason);
+                    dialog.showErrorBox("Error during ifr print", failureReason);
+                    console.error('Error during ifr print:', failureReason);
                 }
                 printWindow.close();
             });
@@ -146,9 +153,9 @@ function setup_printHandlers(ipcMain, mainWindow) {
             return true; // Devolver éxito después de imprimir
 
         } catch (error) {
-            showErrorDialog("Error al imprimir iframe: " + error.message);
+            mainWindow.webContents.send("console-log", "Error in print funct: " + error);
+            dialog.showErrorBox("Error in ifrprint funct", error);
             console.error('Error al imprimir iframe:', error);
-            mainWindow.webContents.send("console-log", "Error en la impresión: " + error.message);
             printWindow.close();
             throw new Error('Error al imprimir iframe');
             return false;

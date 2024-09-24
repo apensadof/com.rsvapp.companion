@@ -3,7 +3,7 @@ const { autoUpdater } = require('electron-updater');
 const electron_log = require('electron-log');
 
 // Función para configurar y manejar eventos del autoUpdater
-function setup_autoUpdater() {
+function setup_autoUpdater(ipcMain, isDev) {
 
   // Configura el logging
   autoUpdater.logger = electron_log;
@@ -51,12 +51,13 @@ function setup_autoUpdater() {
     autoUpdater.quitAndInstall(); 
   });
 
-  if (require('electron-is-dev')) {
+    if (isDev) {
+    console.log('Aplicación en modo desarrollo');
     autoUpdater.autoDownload = false;  // No descargar actualizaciones automáticamente en desarrollo
-  } else {
-    autoUpdater.checkForUpdatesAndNotify();  // En producción, buscar actualizaciones
-  }
-
+    } else {
+    console.log('Aplicación en modo producción');
+    autoUpdater.checkForUpdatesAndNotify();  // En producción, buscar actualizaciones y notificar
+    }
 }
   module.exports = {
     setup_autoUpdater,

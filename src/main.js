@@ -6,6 +6,7 @@ const { setup_srHandlers } = require('./srHandler'); // Importar el manejador de
 const AutoLaunch = require('auto-launch');
 const path = require('path');
 const fs = require('fs');
+const isDev = !app.isPackaged; // app.isPackaged indica si la app está empaquetada
 
 const configPath = path.join(app.getPath('userData'), 'config.json');
 let mainWindow = null;
@@ -13,7 +14,7 @@ let isQuitting = false; // Variable para controlar el estado de cierre
 
 function showErrorDialog(errorTitle, errorMessage) {
     dialog.showErrorBox(errorTitle, errorMessage);
-  }
+}
 
 ipcMain.handle('copy-to-clipboard', (event, text) => {
     clipboard.writeText(text);
@@ -51,7 +52,7 @@ ipcMain.handle('load-config', () => {
   return null;
 });
 ipcMain.handle('check-for-updates', () => {
-    autoUpdater.checkForUpdates();
+    autoUpdater.checkForUpdatesAndNotify();
   });
   
   ipcMain.handle('install-update', () => {
@@ -178,7 +179,7 @@ function build_tray_icon() {
 // Inicializar la app
 app.on('ready', () => {
   build_tray_icon();
-  setup_autoUpdater();
+  setup_autoUpdater(ipcMain, isDev);
 
   const autoLaunch = new AutoLaunch({ name: 'RSV SR Companion', path: app.getPath('exe') });
   autoLaunch.isEnabled().then(isEnabled => {
