@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onIniData: (callback) => ipcRenderer.on('ini-data', (event, data) => callback(data)),
     invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),  // Usa invoke para la comunicación asíncrona
     startDevTools: (callback) => ipcRenderer.invoke('start-dev-tools'),
+    showDialog: (options) => ipcRenderer.invoke('show-dialog', options),
+    showNotification: (title, body) => ipcRenderer.invoke('show-notification', title, body),
     getAppInfo: () => ipcRenderer.invoke('get-app-info'), // Custom information from the main process
     send: (channel, data) => ipcRenderer.send(channel, data),
     on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args)),

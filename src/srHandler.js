@@ -6,7 +6,15 @@ const { dialog } = require('electron');
 
 let mainWindow = null;
 let dbConfig;
+let handlersRegistered = false;
 
+// Helper function to get mainWindow
+function getMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    throw new Error('Main window is not available');
+  }
+  return mainWindow;
+}
 
 function formatDbCred(config){
     return {
@@ -21,8 +29,17 @@ function formatDbCred(config){
       };
 }
 
-function setup_srHandlers(ipcMain, window) {
+function setupSrHandlers(ipcMain, window) {
   mainWindow = window;
+  
+  // No registrar handlers múltiples veces
+  if (handlersRegistered) {
+    console.log('📄 [SR] SR handlers already registered, updating window reference only');
+    return;
+  }
+  
+  handlersRegistered = true;
+  console.log('📄 [SR] Registering SR handlers...');
 
   // Manejador para buscar automáticamente archivos INI
   ipcMain.handle('search-sr-ini', async () => {
@@ -66,6 +83,9 @@ function setup_srHandlers(ipcMain, window) {
     dbConfig = formatDbCred(config);
     return await checkDbConnection(dbConfig);
   });
+  ipcMain.handle('get-db-config', async () => {
+    return dbConfig;
+  }); 
 /*
   // Manejador para obtener las tablas de la base de datos
   ipcMain.handle('get-tables', async (event, config) => {
@@ -214,7 +234,7 @@ async function tableQuery(dbConfig, dbQuery) {
 
 
 module.exports = {
-  setup_srHandlers,
+  setupSrHandlers,
   autoSearchIniFile,
   readIniFile,
   checkDbConnection,
