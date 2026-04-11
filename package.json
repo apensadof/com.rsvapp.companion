@@ -1,7 +1,7 @@
 {
   "description": "RSV Companion",
   "name": "rsv-companion",
-  "version": "1.0.2",
+  "version": "1.1.1",
   "main": "src/main.js",
   "author": "Alejandro Pensado <alex@apensado.com> (http://www.apensado.com/)",
   "scripts": {

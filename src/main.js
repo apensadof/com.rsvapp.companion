@@ -25,6 +25,7 @@ let appName = "RSV Companion";
 let isAppContentValidated = false;
 let reloadTimeout = null;
 let loadUrlTimeout = null;
+let autoLaunchManager = null;
 
 
 // Crear un objeto URL
@@ -95,6 +96,47 @@ ipcMain.handle('reload-app', () => {
   reloadApp();
 });
 
+ipcMain.handle('set-autostart', async (event, enabled) => {
+  try {
+    if (!autoLaunchManager) {
+      autoLaunchManager = new AutoLaunch({
+        name: appName,
+        path: app.getPath('exe'),
+      });
+    }
+
+    const shouldEnable = !!enabled;
+    if (shouldEnable) {
+      await autoLaunchManager.enable();
+    } else {
+      await autoLaunchManager.disable();
+    }
+
+    const isEnabled = await autoLaunchManager.isEnabled();
+    return { success: true, enabled: isEnabled };
+  } catch (error) {
+    console.error('Error setting autostart:', error);
+    return { success: false, enabled: false, error: error.message || String(error) };
+  }
+});
+
+ipcMain.handle('get-autostart', async () => {
+  try {
+    if (!autoLaunchManager) {
+      autoLaunchManager = new AutoLaunch({
+        name: appName,
+        path: app.getPath('exe'),
+      });
+    }
+
+    const isEnabled = await autoLaunchManager.isEnabled();
+    return { success: true, enabled: isEnabled };
+  } catch (error) {
+    console.error('Error getting autostart status:', error);
+    return { success: false, enabled: false, error: error.message || String(error) };
+  }
+});
+
 
 ipcMain.handle('read-from-clipboard', () => {
   return clipboard.readText();
@@ -113,6 +155,34 @@ ipcMain.handle('write-file', async (event, filePath, data) => {
 
 ipcMain.handle('delete-file', async (event, filePath) => {
   return fs.promises.unlink(filePath);
+});
+
+ipcMain.handle('save-sql-file', async (event, options) => {
+  try {
+    const { content, defaultName } = options;
+    
+    // Show save dialog
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Guardar archivo SQL',
+      defaultPath: path.join(app.getPath('downloads'), defaultName || 'database_export.sql'),
+      filters: [
+        { name: 'SQL Files', extensions: ['sql'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    
+    if (result.canceled || !result.filePath) {
+      return { success: false, canceled: true };
+    }
+    
+    // Write file
+    await fs.promises.writeFile(result.filePath, content, 'utf-8');
+    
+    return { success: true, filePath: result.filePath };
+  } catch (error) {
+    console.error('Error saving SQL file:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle('get-user-path', async (event) => {
@@ -570,12 +640,12 @@ function setupTrayIcon() {
 
 function setupAutoLaunch(){
   // Auto Launch
-  let autoLaunch = new AutoLaunch({
+  autoLaunchManager = new AutoLaunch({
     name: appName,
     path: app.getPath('exe'),
   });
-  autoLaunch.isEnabled().then(isEnabled => {
-    if (!isEnabled) autoLaunch.enable();
+  autoLaunchManager.isEnabled().then(isEnabled => {
+    if (!isEnabled) autoLaunchManager.enable();
   });
 }
 

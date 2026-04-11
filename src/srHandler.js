@@ -41,10 +41,10 @@ function setupSrHandlers(ipcMain, window) {
   handlersRegistered = true;
   console.log('📄 [SR] Registering SR handlers...');
 
-  // Manejador para buscar automáticamente archivos INI
-  ipcMain.handle('search-sr-ini', async () => {
+  // Manejador para buscar automáticamente archivos INI (con configuración opcional)
+  ipcMain.handle('search-sr-ini', async (event, searchConfig = {}) => {
     try {
-      const result = await autoSearchIniFile();
+      const result = await autoSearchIniFile(searchConfig);
       return result;
     } catch (error) {
       return { success: false, error };
@@ -115,75 +115,134 @@ function setupSrHandlers(ipcMain, window) {
     });
     }
 
-// Función para buscar el archivo INI automáticamente
-async function autoSearchIniFile() {
-    const baseDir = path.join(getRootDrive(), 'nationalsoft');  // Directorio base donde buscar
-    const versionPattern = /^Softrestaurant\d+(\.\d+)*\w*$/;  // Patrón para versiones, e.g., Softrestaurant9.5.0Pro
-    const iniFilePattern = /^Empresa\s*[a-zA-Z0-9]*\d+\.ini$/;  // Patrón para los archivos INI
-    const restaurantIniFile = 'restaurant.ini';  // Nombre del archivo restaurant.ini
+// Función para buscar TODOS los archivos INI automáticamente
+async function autoSearchIniFile(searchConfig = {}) {
+    // Configuración con valores por defecto
+    const config = {
+      baseDirs: searchConfig.baseDirs || [
+        path.join(getRootDrive(), 'nationalsoft'),
+        path.join('C:', 'nationalsoft'),
+        path.join('D:', 'nationalsoft')
+      ],
+      subFolder: searchConfig.subFolder || 'INIS',
+      versionPattern: searchConfig.versionPattern || /^Softrestaurant\d+(\.\d+)*\w*$/,
+      iniFilePattern: searchConfig.iniFilePattern || /^Empresa\s*[a-zA-Z0-9]*\d+\.ini$/,
+      searchOnlyInINIS: searchConfig.searchOnlyInINIS !== false // Por defecto true
+    };
+    
+    const foundInstallations = []; // Array to store all found installations
     
     try {
-      mainWindow.webContents.send("console-log", `Se buscará en ${baseDir}`);
-      if (!fs.existsSync(baseDir)) {
-        mainWindow.webContents.send("console-log", `El directorio base ${baseDir} no existe.`);
-        return { success: false, error: `El directorio base ${baseDir} no existe.` };
-      } else {
-        mainWindow.webContents.send("console-log", `El directorio base ${baseDir} se encontró.`);
-      }
-    
-      // Registrar todos los directorios en baseDir para depuración
-      const allDirectories = fs.readdirSync(baseDir, { withFileTypes: true });
-      mainWindow.webContents.send("console-log", `Directorios en ${baseDir}: ${allDirectories.map(dir => dir.name).join(', ')}`);
-    
-      // Buscar las versiones instaladas de Softrestaurant dentro del directorio base
-      const directories = allDirectories
-        .filter(dir => dir.isDirectory() && versionPattern.test(dir.name))
-        .map(dir => dir.name);
-    
-      if (directories.length === 0) {
-        mainWindow.webContents.send("console-log", `No se encontraron directorios que coincidan con el patrón de Softrestaurant en ${baseDir}.`);
-      } else {
-        mainWindow.webContents.send("console-log", `Directorios encontrados: ${directories.join(', ')}`);
-      }
-    
-      // Iterar por cada versión encontrada
-      for (const dir of directories) {
-        const iniDir = path.join(baseDir, dir, 'INIS');  // Ruta hacia la carpeta INIS
-        mainWindow.webContents.send("console-log", `Buscando en: ${iniDir}`);
-  
-        if (fs.existsSync(iniDir)) {
-          const files = fs.readdirSync(iniDir);
-          const iniFile = files.find(file => iniFilePattern.test(file));  // Buscar el archivo INI
-  
-          if (iniFile) {
-            const iniPath = path.join(iniDir, iniFile);
-            mainWindow.webContents.send("console-log", `Archivo INI encontrado: ${iniPath}`);
-            const iniContent = fs.readFileSync(iniPath, 'utf-8');
-            const parsedData = ini.parse(iniContent);
-            return { success: true, path:iniPath, iniData: parsedData };
-          } else {
-            mainWindow.webContents.send("console-log", `No se encontraron archivos INI que coincidan en ${iniDir}.`);
+      mainWindow.webContents.send("console-log", `Buscando en múltiples ubicaciones: ${config.baseDirs.join(', ')}`);
+      
+      // Buscar en cada directorio base configurado
+      for (const baseDir of config.baseDirs) {
+        // Verificar si el directorio existe
+        if (!fs.existsSync(baseDir)) {
+          mainWindow.webContents.send("console-log", `⚠️ Directorio ${baseDir} no existe, saltando...`);
+          continue;
+        }
+        
+        mainWindow.webContents.send("console-log", `✓ Encontrado directorio: ${baseDir}`);
+        
+        try {
+          // Registrar todos los directorios en baseDir para depuración
+          const allDirectories = fs.readdirSync(baseDir, { withFileTypes: true });
+          mainWindow.webContents.send("console-log", `Subdirectorios en ${baseDir}: ${allDirectories.map(dir => dir.name).join(', ')}`);
+        
+          // Buscar las versiones instaladas de Softrestaurant dentro del directorio base
+          const directories = allDirectories
+            .filter(dir => dir.isDirectory() && config.versionPattern.test(dir.name))
+            .map(dir => dir.name);
+        
+          if (directories.length === 0) {
+            mainWindow.webContents.send("console-log", `No se encontraron directorios de SoftRestaurant en ${baseDir}.`);
+            continue;
           }
-        } else {
-          mainWindow.webContents.send("console-log", `El directorio ${iniDir} no existe.`);
-        }
-
-        // Si no se encuentra en INIS, buscar el archivo restaurant.ini
-        const restaurantIniPath = path.join(baseDir, dir, restaurantIniFile);
-        if (fs.existsSync(restaurantIniPath)) {
-          mainWindow.webContents.send("console-log", `Archivo restaurant.ini encontrado: ${restaurantIniPath}`);
-          const iniContent = fs.readFileSync(restaurantIniPath, 'utf-8');
-          const parsedData = ini.parse(iniContent);
-          return { success: true, path: iniPath, iniData: parsedData };
-        } else {
-          mainWindow.webContents.send("console-log", `No se encontró ${restaurantIniFile} en ${path.join(baseDir, dir)}.`);
+          
+          mainWindow.webContents.send("console-log", `✓ Versiones encontradas en ${baseDir}: ${directories.join(', ')}`);
+        
+          // Iterar por cada versión encontrada y buscar archivos INI
+          for (const dir of directories) {
+            const iniDir = path.join(baseDir, dir, config.subFolder);
+            mainWindow.webContents.send("console-log", `Buscando en: ${iniDir}`);
+      
+            // Check INIS directory
+            if (fs.existsSync(iniDir)) {
+              const files = fs.readdirSync(iniDir);
+              const iniFiles = files.filter(file => config.iniFilePattern.test(file));
+      
+              if (iniFiles.length > 0) {
+                mainWindow.webContents.send("console-log", `✓ Encontrados ${iniFiles.length} archivos INI en ${iniDir}`);
+                
+                for (const iniFile of iniFiles) {
+                  const iniPath = path.join(iniDir, iniFile);
+                  
+                  try {
+                    const iniContent = fs.readFileSync(iniPath, 'utf-8');
+                    const parsedData = ini.parse(iniContent);
+                    
+                    // Extraer el nombre de la empresa del archivo INI
+                    const empresaMatch = iniFile.match(/Empresa\s*([a-zA-Z0-9]*\d+)/i);
+                    const empresaName = empresaMatch ? empresaMatch[1] : iniFile.replace('.ini', '');
+                    
+                    foundInstallations.push({
+                      version: dir,
+                      baseDir: baseDir,
+                      iniFileName: iniFile,
+                      empresaName: empresaName,
+                      path: iniPath,
+                      iniData: parsedData,
+                      server: parsedData.DataSource || 'N/A',
+                      database: parsedData.Catalog || 'N/A',
+                      type: 'empresa'
+                    });
+                    
+                    mainWindow.webContents.send("console-log", `✓ Procesado: ${iniFile} (${parsedData.Catalog})`);
+                  } catch (error) {
+                    console.error(`Error parsing INI file ${iniPath}:`, error);
+                    mainWindow.webContents.send("console-log", `❌ Error al parsear ${iniPath}: ${error.message}`);
+                  }
+                }
+              } else {
+                mainWindow.webContents.send("console-log", `No se encontraron archivos INI en ${iniDir}.`);
+              }
+            } else {
+              mainWindow.webContents.send("console-log", `Directorio no existe: ${iniDir}`);
+            }
+          }
+        } catch (error) {
+          mainWindow.webContents.send("console-log", `Error procesando ${baseDir}: ${error.message}`);
+          continue;
         }
       }
   
-      return { success: false, error: 'No se encontró ningún archivo INI ni restaurant.ini.' };
+      if (foundInstallations.length === 0) {
+        mainWindow.webContents.send("console-log", `❌ No se encontraron instalaciones de SoftRestaurant en ninguna ubicación`);
+        return { 
+          success: false, 
+          error: 'No se encontraron instalaciones de SoftRestaurant en las rutas configuradas.', 
+          installations: [],
+          searchedPaths: config.baseDirs
+        };
+      }
+      
+      mainWindow.webContents.send("console-log", `✓ Búsqueda completada: ${foundInstallations.length} instalaciones encontradas`);
+      
+      // Return all found installations
+      return { 
+        success: true, 
+        installations: foundInstallations,
+        totalFound: foundInstallations.length,
+        searchedPaths: config.baseDirs,
+        // For backward compatibility, include first installation data
+        path: foundInstallations[0].path,
+        iniData: foundInstallations[0].iniData
+      };
     } catch (error) {
       console.error('Error buscando el archivo INI:', error);
-      return { success: false, error: error.message };
+      mainWindow.webContents.send("console-log", `❌ Error crítico en búsqueda: ${error.message}`);
+      return { success: false, error: error.message, installations: [] };
     }
 }
 
@@ -209,11 +268,53 @@ function readIniFile(filePath) {
 // Función para verificar la conexión con la base de datos
 async function checkDbConnection(config) {
   try {
-    await sql.connect(config);
-    return true;
+    const pool = await sql.connect(config);
+    
+    // Get database information
+    const dbName = config.database;
+    const serverName = config.server;
+    
+    // Get list of tables
+    const tablesResult = await pool.request().query(`
+      SELECT 
+        TABLE_SCHEMA,
+        TABLE_NAME,
+        TABLE_TYPE
+      FROM INFORMATION_SCHEMA.TABLES 
+      WHERE TABLE_TYPE = 'BASE TABLE'
+      ORDER BY TABLE_SCHEMA, TABLE_NAME
+    `);
+    
+    const tables = tablesResult.recordset;
+    
+    // Get database size
+    let dbSize = null;
+    try {
+      const sizeResult = await pool.request().query(`
+        SELECT 
+          SUM(size) * 8 / 1024 as SizeMB
+        FROM sys.master_files
+        WHERE database_id = DB_ID()
+      `);
+      dbSize = sizeResult.recordset[0]?.SizeMB;
+    } catch (err) {
+      console.log('Could not get database size:', err.message);
+    }
+    
+    return {
+      success: true,
+      database: dbName,
+      server: serverName,
+      tables: tables,
+      tableCount: tables.length,
+      sizeMB: dbSize ? Math.round(dbSize) : null
+    };
   } catch (error) {
     console.error('Error al conectar a la base de datos:', error);
-    return false;
+    return {
+      success: false,
+      error: error.message
+    };
   }
 }
 

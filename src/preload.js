@@ -22,3 +22,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     once: (channel, callback) => ipcRenderer.once(channel, (event, ...args) => callback(...args))
 });
 
+contextBridge.exposeInMainWorld('electron', {
+    setAutostart: async (enabled) => {
+        const result = await ipcRenderer.invoke('set-autostart', !!enabled);
+        if (!result || result.success !== true) {
+            throw new Error(result?.error || 'No se pudo actualizar el autostart');
+        }
+        return result.enabled === true;
+    },
+    getAutostart: async () => {
+        const result = await ipcRenderer.invoke('get-autostart');
+        if (!result || result.success !== true) {
+            throw new Error(result?.error || 'No se pudo consultar autostart');
+        }
+        return result.enabled === true;
+    }
+});
