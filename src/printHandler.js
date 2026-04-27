@@ -7,6 +7,22 @@ let selectedPrinter = null;
 let mainWindowRef = null;
 let handlersRegistered = false;
 
+function resolveThermalWidthPx(paramsConfig = {}) {
+  const explicitWidth = Number(paramsConfig.printWidth);
+  if (Number.isFinite(explicitWidth) && explicitWidth > 0) {
+    return Math.round(explicitWidth);
+  }
+
+  const pageWidthMicrons = Number(paramsConfig?.pageSize?.width);
+  if (Number.isFinite(pageWidthMicrons) && pageWidthMicrons > 0) {
+    const widthMm = pageWidthMicrons / 1000;
+    const widthPx = Math.round((widthMm / 25.4) * 96);
+    return Math.max(200, widthPx);
+  }
+
+  return 302; // 80mm @ ~96 DPI
+}
+
 // Helper function to get mainWindow
 function getMainWindow() {
   if (!mainWindowRef || mainWindowRef.isDestroyed()) {
@@ -196,14 +212,14 @@ function setupPrintHandlers(ipcMain, mainWindow) {
   });
 
     // Imprimir iframe
-    ipcMain.handle('print-iframe', async (event, src, paramsConfig = {}) => {
+  ipcMain.handle('print-iframe', async (event, src, paramsConfig = {}) => {
     try {
         const win = getMainWindow();
         if (win && !win.isDestroyed()) {
           win.webContents.send("console-log", "Triggered print-ifr interface: " + src);
         }
-        // Tamaño para impresora térmica 80mm (~302px a 96 DPI)
-        const thermalWidth = paramsConfig.printWidth || 302; // 80mm default
+        // Tamaño ventana de impresión (derivado de printWidth o pageSize.width en micras).
+        const thermalWidth = resolveThermalWidthPx(paramsConfig);
         let printWindow = new BrowserWindow(
             { 
                 show: false,
@@ -237,6 +253,16 @@ function setupPrintHandlers(ipcMain, mainWindow) {
 
         try {
             const win = getMainWindow();
+            const widthMm = Number(paramsConfig?.pageSize?.width) > 0
+              ? (Number(paramsConfig.pageSize.width) / 1000)
+              : 80;
+            const scaleFactor = Number.isFinite(Number(paramsConfig?.scaleFactor))
+              ? Number(paramsConfig.scaleFactor)
+              : (Number.isFinite(Number(paramsConfig?.scale))
+                ? Number(paramsConfig.scale) / 100
+                : 1);
+            const offsetX = Number.isFinite(Number(paramsConfig?.offset?.x)) ? Number(paramsConfig.offset.x) : 0;
+            const offsetY = Number.isFinite(Number(paramsConfig?.offset?.y)) ? Number(paramsConfig.offset.y) : 0;
             
             // Esperar a que los recursos estén completamente cargados (evento 'load' del window)
             await printWindow.webContents.executeJavaScript(`
@@ -248,6 +274,24 @@ function setupPrintHandlers(ipcMain, mainWindow) {
                 }
               })
             `);
+            await printWindow.webContents.insertCSS(`
+              @page { size: ${widthMm}mm auto; margin: 0; }
+              html, body {
+                width: ${widthMm}mm !important;
+                max-width: ${widthMm}mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow-x: hidden !important;
+              }
+              body {
+                transform: translate(${offsetX}px, ${offsetY}px) scale(${scaleFactor});
+                transform-origin: top left;
+              }
+              img, table, div, pre, code {
+                max-width: 100% !important;
+                height: auto !important;
+              }
+            `);
 
             const printers = await win.webContents.getPrintersAsync();
 
@@ -257,11 +301,11 @@ function setupPrintHandlers(ipcMain, mainWindow) {
                 deviceName: printers[0].name,  // Impresora predeterminada
                 silent: true,  // No mostrar el diálogo de impresión
                 printBackground: true,  // Imprimir con fondos
-                margins: {marginType: 'default'},  // Sin márgenes
+                margins: {marginType: 'none'},  // Sin márgenes
                 pageSize: 'Letter',  // Tamaño de página predeterminado
                 landscape: false,  // Vertical
                 color: true, // Color o BN
-                scale: 100,  // Escala al 100%
+                scaleFactor: 100,  // Escala al 100%
                 pagesPerSheet: 1,  // Una página por hoja
                 collate: true,  // Agrupado
                 copies: 1,  // Número de copias
@@ -278,6 +322,13 @@ function setupPrintHandlers(ipcMain, mainWindow) {
                     ? printers[paramsConfig.selectedPrinter].name  // Usar la impresora seleccionada
                     : defaultConfig.deviceName  // Usar la impresora predeterminada si no se selecciona una
             };
+            const normalizedPrintScaleFactor = Number.isFinite(Number(printConfig.scaleFactor))
+              ? (Number(printConfig.scaleFactor) <= 10
+                ? Math.round(Number(printConfig.scaleFactor) * 100)
+                : Number(printConfig.scaleFactor))
+              : (Number.isFinite(Number(printConfig.scale))
+                ? Number(printConfig.scale)
+                : 100);
 
             // Definir la configuración del trabajo de impresión
             const printJobConfig = {
@@ -287,7 +338,7 @@ function setupPrintHandlers(ipcMain, mainWindow) {
                 margins: printConfig.margins,
                 pageSize: printConfig.pageSize,
                 landscape: printConfig.landscape,
-                scale: printConfig.scale,
+                scaleFactor: normalizedPrintScaleFactor,
                 pagesPerSheet: printConfig.pagesPerSheet,
                 collate: printConfig.collate,
                 copies: printConfig.copies,
@@ -353,7 +404,7 @@ function setupPrintHandlers(ipcMain, mainWindow) {
           win.webContents.send('console-log', 'print-html: loading ' + fileUrl);
         }
 
-        const thermalWidth = paramsConfig.printWidth || 302;
+        const thermalWidth = resolveThermalWidthPx(paramsConfig);
         const printWindow = new BrowserWindow({
           show: false,
           width: thermalWidth,
