@@ -11,9 +11,10 @@
     "build-update": "bash ./scripts/build-update.sh",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "dist:all": "electron-builder -mw && node \"./dist/sign.js\"",
-    "dist:mac": "electron-builder --mac && node \"./dist/sign.js\"",
-    "dist:win": "electron-builder --win --x64 && node \"./dist/sign.js\"",
+    "sign": "bash ./scripts/sign.sh",
+    "dist:all": "electron-builder -mw && npm run sign",
+    "dist:mac": "electron-builder --mac && npm run sign",
+    "dist:win": "electron-builder --win --x64 && npm run sign",
     "dist:linux": "electron-builder --linux"
   },
   "keywords": [],
